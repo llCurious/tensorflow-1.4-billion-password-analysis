@@ -39,23 +39,36 @@ class CharacterTable(object):
         self.char_indices = dict((c, i) for i, c in enumerate(self.chars))
         self.indices_char = dict((i, c) for i, c in enumerate(self.chars))
 
+    def add_token(self, char):
+        self.char_indices[char] = len(self.char_indices)
+
+    def encode_char(self, char):
+        return self.char_indices[char]
+
     def encode(self, C, num_rows):
         """One hot encode given string C.
         # Arguments
             num_rows: Number of rows in the returned one hot encoding. This is
                 used to keep the # of rows for each data the same.
         """
-        x = np.zeros((num_rows, len(self.chars)))
-        for i in range(num_rows):
+        # x = np.zeros((num_rows, len(self.chars)))
+        # add for transformer
+        x = np.zeros(num_rows)
+        x[0] = self.encode_char('<START>')
+        x[-1] = self.encode_char('<END>')
+        for i in range(1, num_rows-1):
             try:
                 c = C[i]
                 if c not in self.char_indices:
-                    x[i, self.char_indices['？']] = 1
+                    # x[i, self.char_indices['？']] = 1
+                    x[i] = self.char_indices['？']
                 else:
-                    x[i, self.char_indices[c]] = 1
+                    # x[i, self.char_indices[c]] = 1
+                    x[i] = self.char_indices[c]
             except IndexError:
-                x[i, self.char_indices[' ']] = 1
-        return x
+                # x[i, self.char_indices[' ']] = 1
+                x[i] = self.char_indices[' ']
+        return x.tolist()
 
     def decode(self, x, calc_argmax=True):
         if calc_argmax:
@@ -72,6 +85,7 @@ class colors:
 def get_chars_and_ctable():
     chars = ''.join(list(get_token_indices().values()))
     ctable = CharacterTable(chars)
+
     return chars, ctable
 
 
@@ -148,7 +162,7 @@ class LazyDataLoader:
 
 if __name__ == '__main__':
     # how to use it.
-    ldl = LazyDataLoader('/home/premy/BreachCompilationAnalysis/edit-distances/1.csv')
+    ldl = LazyDataLoader('/Users/HaoqiWu/BreachCompilationAnalysis/edit-distances/1.csv')
     print(ldl.statistics())
     while True:
         print(ldl.next())

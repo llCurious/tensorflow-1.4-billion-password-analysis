@@ -8,6 +8,8 @@ import os
 from keras import layers
 from keras.layers import Dropout
 from keras.models import Sequential
+from keras_transformer import get_model
+from keras_transformer import decode
 
 from data_gen import get_chars_and_ctable, colors
 from train_constants import ENCODING_MAX_PASSWORD_LENGTH, ENCODING_MAX_SIZE_VOCAB
@@ -49,19 +51,30 @@ def gen_large_chunk_single_thread(inputs_, targets_, chunk_size):
     sub_inputs = inputs_[random_indices]
     sub_targets = targets_[random_indices]
 
-    x = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH, len(chars)), dtype=np.bool)
-    y = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH, len(chars)), dtype=np.bool)
+    x = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH))
+    y = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH))
+    output = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH, 1))
+
 
     for i_, element in enumerate(sub_inputs):
+        # print('asd ', element)
+        # todo: add segment and word embeddings
         x[i_] = c_table.encode(element, ENCODING_MAX_PASSWORD_LENGTH)
     for i_, element in enumerate(sub_targets):
         y[i_] = c_table.encode(element, ENCODING_MAX_PASSWORD_LENGTH)
+        res = [[x] for x in c_table.encode(element, ENCODING_MAX_PASSWORD_LENGTH)[1:]]
+        res.append([0])
+        # print(res)
+        output[i_] = res
 
     split_at = len(x) - len(x) // 10
     (x_train, x_val) = x[:split_at], x[split_at:]
     (y_train, y_val) = y[:split_at], y[split_at:]
+    (output_y_train, output_y_val) = output[:split_at], output[split_at:]
 
-    return x_train, y_train, x_val, y_val
+    print(np.array(x_train).shape)
+    return x_train, y_train, x_val, y_val, output_y_train, output_y_val
+    # return [np.array(list(x)) for x in x_train], [np.array(list(x)) for x in y_train], [np.array(list(x)) for x in x_val], [np.array(list(x)) for x in y_val]
 
 
 def predict_top_most_likely_passwords_monte_carlo(model_, rowx_, n_, mc_samples=10000):
@@ -118,7 +131,7 @@ print('Loading data from prefetch...')
 data = np.load('/tmp/x_y.npz')
 inputs = data['inputs']
 targets = data['targets']
-
+print(inputs[0])
 print('Data:')
 print(inputs.shape)
 print(targets.shape)
@@ -171,16 +184,43 @@ def model_3():
     return m
 
 
-model = model_3()
+def model_transformer():
+    # chars = chars +  '<START>'
+    m = get_model(
+        token_num=len(chars) + 2,
+        embed_dim=len(chars) + 2,
+        encoder_num=3,
+        decoder_num=2,
+        head_num=2,
+        hidden_dim=120,
+        attention_activation='relu',
+        feed_forward_activation='relu',
+        dropout_rate=0.05,
+        embed_weights=np.random.random((84, 84)),
+    )
+    return m
 
-model.compile(loss='categorical_crossentropy',
-              optimizer='adam',
-              metrics=['accuracy'])
+model = model_transformer()
+chars = chars + '<START>' + '<END>'
+print('chars: [ ', chars, ' ]')
+# add for transformer
+c_table.add_token('<START>')
+c_table.add_token('<END>')
+# model.compile(loss='categorical_crossentropy',
+#               optimizer='adam',
+#               metrics=['accuracy'])
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
 model.summary()
 
 # Train the model each generation and show predictions against the validation data set.
-for iteration in range(1, int(1e9)):
-    x_train, y_train, x_val, y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE * 500)
+iteration_total = 500
+for iteration in range(1, iteration_total):
+    x_train, y_train, x_val, y_val, output_y_train, output_y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE)
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -193,13 +233,31 @@ for iteration in range(1, int(1e9)):
     # Accuracy too.
     # One way to do that is to predict the ADD/DEL/MOD op along with the character of interest and the index
     # The index can just be a softmax over the indices of the password array, augmented (with a convention)
-    model.fit(x_train, y_train,
-              batch_size=BATCH_SIZE,
-              epochs=5,
-              validation_data=(x_val, y_val))
+
+    print(x_train[0], " : ", y_train[0], " : ", output_y_train[0])
+    #
+    model.fit(
+        x=[x_train, y_train],
+        y=output_y_train,
+        batch_size=BATCH_SIZE,
+        epochs=1,
+        validation_data=([x_val, y_val], output_y_val)
+    )
     # Select 10 samples from the validation set at random so we can visualize
     # errors.
-    for i in range(10):
+    print('*' * 50)
+    print(x_val.shape)
+    decoded = decode(
+        model,
+        tokens=[x.tolist() for x in x_val],
+        start_token=c_table.encode_char('<START>'),
+        end_token=c_table.encode_char('<END>'),
+        pad_token=0,
+        max_len=14,
+    )
+    print(decoded)
+
+    for i in range(0):
         ind = np.random.randint(0, len(x_val))
         rowx, rowy = x_val[np.array([ind])], y_val[np.array([ind])]  # replace by x_val, y_val
         preds = model.predict_classes(rowx, verbose=0)

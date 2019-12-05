@@ -3,7 +3,7 @@
 #
 
 # Maximum password length. Passwords greater than this length will be discarded during the encoding phase.
-ENCODING_MAX_PASSWORD_LENGTH = 12
+ENCODING_MAX_PASSWORD_LENGTH = 14
 
 # Maximum number of characters for encoding. By default, we use the 80 most frequent characters and
 # we bin the other ones in a OOV (out of vocabulary) group.
