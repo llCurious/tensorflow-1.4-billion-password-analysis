@@ -188,7 +188,7 @@ def model_transformer():
     # chars = chars +  '<START>'
     m = get_model(
         token_num=len(chars) + 2,
-        embed_dim=len(chars) + 2,
+        embed_dim=100,  # word/character embedding dim
         encoder_num=3,
         decoder_num=2,
         head_num=2,
@@ -196,9 +196,10 @@ def model_transformer():
         attention_activation='relu',
         feed_forward_activation='relu',
         dropout_rate=0.05,
-        embed_weights=np.random.random((84, 84)),
+        embed_weights=np.random.random((84, 100)),
     )
     return m
+
 
 model = model_transformer()
 chars = chars + '<START>' + '<END>'
@@ -219,6 +220,7 @@ model.summary()
 
 # Train the model each generation and show predictions against the validation data set.
 iteration_total = 500
+print(c_table.char_indices)
 for iteration in range(1, iteration_total):
     x_train, y_train, x_val, y_val, output_y_train, output_y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE)
     print()
@@ -234,7 +236,7 @@ for iteration in range(1, iteration_total):
     # One way to do that is to predict the ADD/DEL/MOD op along with the character of interest and the index
     # The index can just be a softmax over the indices of the password array, augmented (with a convention)
 
-    print(x_train[0], " : ", y_train[0], " : ", output_y_train[0])
+    # print(x_train[0], " : ", y_train[0], " : ", output_y_train[0])
     #
     model.fit(
         x=[x_train, y_train],
@@ -253,9 +255,18 @@ for iteration in range(1, iteration_total):
         start_token=c_table.encode_char('<START>'),
         end_token=c_table.encode_char('<END>'),
         pad_token=0,
-        max_len=14,
+        max_len=ENCODING_MAX_PASSWORD_LENGTH,
     )
-    print(decoded)
+
+    # print(decoded)
+
+    for i in range(len(decoded)):
+        password = c_table.decode(decoded[i], calc_argmax=False)
+        print('former: ', x_val[i])
+        print('former-decode: ', c_table.decode(x_val[i], False))
+        print('target: ', c_table.decode(y_val[i], False))
+        print('decoded: ', decoded[i])
+        print('guess: ', password)
 
     for i in range(0):
         ind = np.random.randint(0, len(x_val))
@@ -271,7 +282,7 @@ for iteration in range(1, iteration_total):
         # s = [np.random.choice(a=range(82), size=1, p=p[i, :])[0] for i in range(12)]
         # c_table.decode(s, calc_argmax=False)
         # Could sample 1000 and take the most_common()
-        print('new    :', correct)
+        print('correct    :', correct)
         print('former :', q)
         print('guess  :', guess, end=' ')
 

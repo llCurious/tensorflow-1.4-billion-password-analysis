@@ -41,6 +41,7 @@ class CharacterTable(object):
 
     def add_token(self, char):
         self.char_indices[char] = len(self.char_indices)
+        self.indices_char[len(self.indices_char)] = char
 
     def encode_char(self, char):
         return self.char_indices[char]
@@ -102,7 +103,7 @@ def build_vocabulary(training_filename):
                     vocabulary[element] = 0
                 vocabulary[element] += 1
     vocabulary_sorted_list = sorted(dict(Counter(vocabulary).most_common(ENCODING_MAX_SIZE_VOCAB)).keys())
-    oov_char = '？'
+    oov_char = '？'  # 中文？作为vocabulary之外的字符
     pad_char = ' '
     print('Out of vocabulary (OOV) char is {}'.format(oov_char))
     print('Pad char is "{}"'.format(pad_char))
@@ -111,6 +112,8 @@ def build_vocabulary(training_filename):
     print('Vocabulary = ' + ' '.join(vocabulary_sorted_list))
     token_indices = dict((c, i) for (c, i) in enumerate(vocabulary_sorted_list))
     indices_token = dict((i, c) for (c, i) in enumerate(vocabulary_sorted_list))
+    print(token_indices)
+    print(indices_token)
     assert len(token_indices) == len(indices_token)
 
     with open('/tmp/token_indices.pkl', 'wb') as w:
