@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 
-from data_gen import LazyDataLoader, build_vocabulary, get_chars_and_ctable
+from data_gen import LazyDataLoader, build_vocabulary, get_chars_and_ctable, build_vocabulary_word
 
 parser = argparse.ArgumentParser('Data Encoding Tool.')
 parser.add_argument('--training_filename', type=str,
@@ -16,7 +16,9 @@ arg_p = parser.parse_args()
 
 print('Building vocabulary...')
 
-build_vocabulary(arg_p.training_filename)
+# build word level vocabulary, curious
+build_vocabulary_word(arg_p.training_filename)
+# build_vocabulary(arg_p.training_filename)
 
 print('Vectorization...')
 
@@ -27,7 +29,7 @@ _, _, training_records_count = DATA_LOADER.statistics()
 # TOKEN_INDICES = get_token_indices()
 
 chars, c_table = get_chars_and_ctable()
-
+print(c_table.char_indices)
 inputs = []
 targets = []
 print('Generating data...')

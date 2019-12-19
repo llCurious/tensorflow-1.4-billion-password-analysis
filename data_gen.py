@@ -1,18 +1,18 @@
 import pickle
 from collections import Counter
-
+import wordsegment as ws
 import numpy as np
 from tqdm import tqdm
 
-from train_constants import ENCODING_MAX_PASSWORD_LENGTH, ENCODING_MAX_SIZE_VOCAB
+from train_constants import *
 
 
 def get_indices_token():
-    return pickle.load(open('/tmp/indices_token.pkl', 'rb'))
+    return pickle.load(open('/tmp/indices_token_word.pkl', 'rb'))
 
 
 def get_token_indices():
-    return pickle.load(open('/tmp/token_indices.pkl', 'rb'))
+    return pickle.load(open('/tmp/token_indices_word.pkl', 'rb'))
 
 
 def get_vocab_size():
@@ -53,10 +53,64 @@ class CharacterTable(object):
                 used to keep the # of rows for each data the same.
         """
         # x = np.zeros((num_rows, len(self.chars)))
-        # add for transformer
+        # add for transformer, 给每一个password添加开始结束字符
         x = np.zeros(num_rows)
-        x[0] = self.encode_char('<START>')
-        x[-1] = self.encode_char('<END>')
+        x[0] = self.encode_char(start_token)
+        x[-1] = self.encode_char(end_token)
+        for i in range(1, num_rows-1):
+            try:
+                c = C[i]
+                if c not in self.char_indices:
+                    # x[i, self.char_indices['？']] = 1
+                    x[i] = self.char_indices['？']
+                else:
+                    # x[i, self.char_indices[c]] = 1
+                    x[i] = self.char_indices[c]
+            except IndexError:
+                # x[i, self.char_indices[' ']] = 1
+                x[i] = self.char_indices[' ']
+        return x.tolist()
+
+    def decode(self, x, calc_argmax=True):
+        if calc_argmax:
+            x = x.argmax(axis=-1)
+        return ''.join(self.indices_char[x] for x in x)
+
+
+class WordTable(object):
+    """Given a set of words:
+    + Encode them to a one hot integer representation
+    + Decode the one hot integer representation to their character output
+    + Decode a vector of probabilities to their character output
+    """
+
+    def __init__(self, chars):
+        """Initialize character table.
+        # Arguments
+            chars: Characters that can appear in the input.
+        """
+        self.chars = sorted(set(chars))
+        self.char_indices = dict((c, i) for i, c in enumerate(self.chars))
+        self.indices_char = dict((i, c) for i, c in enumerate(self.chars))
+
+    def add_token(self, char):
+        self.char_indices[char] = len(self.char_indices)
+        self.indices_char[len(self.indices_char)] = char
+
+    def encode_char(self, char):
+        return self.char_indices[char]
+
+    def encode(self, C, num_rows):
+        """One hot encode given string C.
+        # Arguments
+            num_rows: Number of rows in the returned one hot encoding. This is
+                used to keep the # of rows for each data the same.
+        """
+        # x = np.zeros((num_rows, len(self.chars)))
+        # add for transformer, 给每一个password添加开始结束字符
+        x = np.zeros(num_rows)
+        x[0] = self.encode_char(start_token)
+        x[-1] = self.encode_char(end_token)
         for i in range(1, num_rows-1):
             try:
                 c = C[i]
@@ -85,9 +139,17 @@ class colors:
 
 def get_chars_and_ctable():
     chars = ''.join(list(get_token_indices().values()))
+    print(chars)
     ctable = CharacterTable(chars)
 
     return chars, ctable
+
+
+def get_words_and_wtable():
+    words = [i for i in get_token_indices().values()]
+    print(words)
+    wtable = WordTable(words)
+    return words, wtable
 
 
 def build_vocabulary(training_filename):
@@ -102,9 +164,9 @@ def build_vocabulary(training_filename):
                 if element not in vocabulary:
                     vocabulary[element] = 0
                 vocabulary[element] += 1
+    # 这里只考虑出现次数最多的前80种字符
     vocabulary_sorted_list = sorted(dict(Counter(vocabulary).most_common(ENCODING_MAX_SIZE_VOCAB)).keys())
-    oov_char = '？'  # 中文？作为vocabulary之外的字符
-    pad_char = ' '
+
     print('Out of vocabulary (OOV) char is {}'.format(oov_char))
     print('Pad char is "{}"'.format(pad_char))
     vocabulary_sorted_list.append(oov_char)  # out of vocabulary.
@@ -124,6 +186,47 @@ def build_vocabulary(training_filename):
 
     print('Done... File is /tmp/token_indices.pkl')
     print('Done... File is /tmp/indices_token.pkl')
+
+
+def build_vocabulary_word(training_filename):
+    vocabulary = {}
+    print('Reading file {}.'.format(training_filename))
+    ws.load()
+    with open(training_filename, 'rb') as r:
+        for l in tqdm(r.readlines(), desc='Build Vocabulary'):
+            line_id, x, y = l.decode('utf8').strip().split(' ||| ')
+            # print(x, y)
+
+            words_src = ws.segment(x)
+            words_tag = ws.segment(y)
+
+            # print(set(words_src + words_tag))
+            for element in list(words_src + words_tag):
+                if element not in vocabulary:
+                    vocabulary[element] = 0
+                vocabulary[element] += 1
+    # 这里只考虑出现次数最多的前80种字符
+    vocabulary_sorted_list = sorted(dict(Counter(vocabulary).most_common(ENCODING_MAX_SIZE_VOCAB)).keys())
+
+    print('Out of vocabulary (OOV) char is {}'.format(oov_char))
+    print('Pad char is "{}"'.format(pad_char))
+    vocabulary_sorted_list.append(oov_char)  # out of vocabulary.
+    vocabulary_sorted_list.append(pad_char)  # pad char.
+    print('Vocabulary = ' + ' '.join(vocabulary_sorted_list))
+    token_indices = dict((c, i) for (c, i) in enumerate(vocabulary_sorted_list))
+    indices_token = dict((i, c) for (c, i) in enumerate(vocabulary_sorted_list))
+    print(token_indices)
+    print(indices_token)
+    assert len(token_indices) == len(indices_token)
+
+    with open('/tmp/token_indices_word.pkl', 'wb') as w:
+        pickle.dump(obj=token_indices, file=w)
+
+    with open('/tmp/indices_token_word.pkl', 'wb') as w:
+        pickle.dump(obj=indices_token, file=w)
+
+    print('Done... File is /tmp/token_indices_word.pkl')
+    print('Done... File is /tmp/indices_token_word.pkl')
 
 
 def stream_from_file(training_filename):

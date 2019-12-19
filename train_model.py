@@ -11,17 +11,31 @@ from keras.models import Sequential
 from keras_transformer import get_model
 from keras_transformer import decode
 
-from data_gen import get_chars_and_ctable, colors
-from train_constants import ENCODING_MAX_PASSWORD_LENGTH, ENCODING_MAX_SIZE_VOCAB
+from data_gen import get_chars_and_ctable, colors, get_words_and_wtable
+from train_constants import *
 
-INPUT_MAX_LEN = ENCODING_MAX_PASSWORD_LENGTH
-OUTPUT_MAX_LEN = ENCODING_MAX_PASSWORD_LENGTH
 
-try:
+def add_chars_for_transformer():
     chars, c_table = get_chars_and_ctable()
-except FileNotFoundError:
-    print('Run first run_encoding.py to generate the required files.')
-    exit(1)
+    print('chars: [ ', chars, ' ]')
+    chars = chars + start_token + end_token
+    print('chars: [ ', chars, ' ]')
+    c_table.add_token(start_token)
+    c_table.add_token(end_token)
+    # c_table.add_token(pad_char)
+    return chars, c_table
+
+
+def add_words_for_transformer():
+    words, w_table = get_words_and_wtable()
+    print('words: [ ', words, ' ]')
+    words.append(start_token)
+    words.append(end_token)
+    print('words: [ ', words, ' ]')
+    w_table.add_token(start_token)
+    w_table.add_token(end_token)
+    # w_table.add_token(pad_char)
+    return words, w_table
 
 
 def get_arguments(parser):
@@ -55,9 +69,7 @@ def gen_large_chunk_single_thread(inputs_, targets_, chunk_size):
     y = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH))
     output = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH, 1))
 
-
     for i_, element in enumerate(sub_inputs):
-        # print('asd ', element)
         # todo: add segment and word embeddings
         x[i_] = c_table.encode(element, ENCODING_MAX_PASSWORD_LENGTH)
     for i_, element in enumerate(sub_targets):
@@ -124,6 +136,22 @@ def gen_large_chunk_multi_thread(inputs_, targets_, chunk_size):
     return x_train, y_train, x_val, y_val
 
 
+# init
+INPUT_MAX_LEN = ENCODING_MAX_PASSWORD_LENGTH
+OUTPUT_MAX_LEN = ENCODING_MAX_PASSWORD_LENGTH
+
+# load vocabulary
+try:
+    # chars, c_table = get_chars_and_ctable()
+    # add for transformer
+    chars, c_table = add_words_for_transformer()
+    # words, w_table = add_words_for_transformer()
+    print('char indices: [', c_table.indices_char, ']')
+except FileNotFoundError:
+    print('Run first run_encoding.py to generate the required files.')
+    exit(1)
+
+# load data
 if not os.path.exists('/tmp/x_y.npz'):
     raise Exception('Please run the vectorization script before.')
 
@@ -187,8 +215,8 @@ def model_3():
 def model_transformer():
     # chars = chars +  '<START>'
     m = get_model(
-        token_num=len(chars) + 2,
-        embed_dim=100,  # word/character embedding dim
+        token_num=len(c_table.char_indices),
+        embed_dim=EMBEDDING_DIM,  # word/character embedding dim
         encoder_num=3,
         decoder_num=2,
         head_num=2,
@@ -196,20 +224,16 @@ def model_transformer():
         attention_activation='relu',
         feed_forward_activation='relu',
         dropout_rate=0.05,
-        embed_weights=np.random.random((84, 100)),
+        embed_weights=np.random.random((len(c_table.char_indices), EMBEDDING_DIM)),
     )
     return m
 
 
 model = model_transformer()
-chars = chars + '<START>' + '<END>'
-print('chars: [ ', chars, ' ]')
-# add for transformer
-c_table.add_token('<START>')
-c_table.add_token('<END>')
 # model.compile(loss='categorical_crossentropy',
 #               optimizer='adam',
 #               metrics=['accuracy'])
+# for transformer
 model.compile(
     optimizer='adam',
     loss='sparse_categorical_crossentropy',
@@ -220,7 +244,6 @@ model.summary()
 
 # Train the model each generation and show predictions against the validation data set.
 iteration_total = 500
-print(c_table.char_indices)
 for iteration in range(1, iteration_total):
     x_train, y_train, x_val, y_val, output_y_train, output_y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE)
     print()
@@ -252,9 +275,9 @@ for iteration in range(1, iteration_total):
     decoded = decode(
         model,
         tokens=[x.tolist() for x in x_val],
-        start_token=c_table.encode_char('<START>'),
-        end_token=c_table.encode_char('<END>'),
-        pad_token=0,
+        start_token=c_table.encode_char(start_token),
+        end_token=c_table.encode_char(end_token),
+        pad_token=c_table.encode_char(pad_char),
         max_len=ENCODING_MAX_PASSWORD_LENGTH,
     )
 
