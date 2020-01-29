@@ -59,14 +59,14 @@ model = get_model(
 model.compile('adam', 'sparse_categorical_crossentropy')
 model.summary()
 
-print(encode_tokens[0], " : ", decode_tokens[0], " : ", output_tokens[0])
+print(encode_input[0], " : ", decode_input[0], " : ", decode_output[0])
 model.fit(
     x=[np.array(encode_input * 1024), np.array(decode_input * 1024)],
     y=np.array(decode_output * 1024),
     epochs=10,
     batch_size=32,
 )
-
+print("asds: ", np.array(encode_input * 1024)[:10])
 # Predict
 decoded = decode(
     model,

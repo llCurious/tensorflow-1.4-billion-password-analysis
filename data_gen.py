@@ -8,11 +8,11 @@ from train_constants import *
 
 
 def get_indices_token():
-    return pickle.load(open('/tmp/indices_token_word.pkl', 'rb'))
+    return pickle.load(open(INDICES_TOKEN_CHAR_PATH, 'rb'))
 
 
 def get_token_indices():
-    return pickle.load(open('/tmp/token_indices_word.pkl', 'rb'))
+    return pickle.load(open(TOKEN_INDICES_CHAR_PATH, 'rb'))
 
 
 def get_vocab_size():
@@ -68,7 +68,7 @@ class CharacterTable(object):
                     x[i] = self.char_indices[c]
             except IndexError:
                 # x[i, self.char_indices[' ']] = 1
-                x[i] = self.char_indices[' ']
+                x[i] = self.char_indices[pad_char]
         return x.tolist()
 
     def decode(self, x, calc_argmax=True):
@@ -139,9 +139,9 @@ class colors:
 
 def get_chars_and_ctable():
     chars = ''.join(list(get_token_indices().values()))
-    print(chars)
-    ctable = CharacterTable(chars)
+    print("vocab: ", chars)
 
+    ctable = CharacterTable(chars)
     return chars, ctable
 
 
@@ -168,9 +168,9 @@ def build_vocabulary(training_filename):
     vocabulary_sorted_list = sorted(dict(Counter(vocabulary).most_common(ENCODING_MAX_SIZE_VOCAB)).keys())
 
     print('Out of vocabulary (OOV) char is {}'.format(oov_char))
-    print('Pad char is "{}"'.format(pad_char))
+    print('Pad char is "{}"'.format(' '))
     vocabulary_sorted_list.append(oov_char)  # out of vocabulary.
-    vocabulary_sorted_list.append(pad_char)  # pad char.
+    vocabulary_sorted_list.append(' ')  # pad char.
     print('Vocabulary = ' + ' '.join(vocabulary_sorted_list))
     token_indices = dict((c, i) for (c, i) in enumerate(vocabulary_sorted_list))
     indices_token = dict((i, c) for (c, i) in enumerate(vocabulary_sorted_list))
@@ -178,14 +178,14 @@ def build_vocabulary(training_filename):
     print(indices_token)
     assert len(token_indices) == len(indices_token)
 
-    with open('/tmp/token_indices.pkl', 'wb') as w:
+    with open(TOKEN_INDICES_CHAR_PATH, 'wb') as w:
         pickle.dump(obj=token_indices, file=w)
 
-    with open('/tmp/indices_token.pkl', 'wb') as w:
+    with open(INDICES_TOKEN_CHAR_PATH, 'wb') as w:
         pickle.dump(obj=indices_token, file=w)
 
-    print('Done... File is /tmp/token_indices.pkl')
-    print('Done... File is /tmp/indices_token.pkl')
+    print('Done... File is ', TOKEN_INDICES_CHAR_PATH)
+    print('Done... File is ', INDICES_TOKEN_CHAR_PATH)
 
 
 def build_vocabulary_word(training_filename):
@@ -219,14 +219,14 @@ def build_vocabulary_word(training_filename):
     print(indices_token)
     assert len(token_indices) == len(indices_token)
 
-    with open('/tmp/token_indices_word.pkl', 'wb') as w:
+    with open(TOKEN_INDICES_WORD_PATH, 'wb') as w:
         pickle.dump(obj=token_indices, file=w)
 
-    with open('/tmp/indices_token_word.pkl', 'wb') as w:
+    with open(INDICES_TOKEN_WORD_PATH, 'wb') as w:
         pickle.dump(obj=indices_token, file=w)
 
-    print('Done... File is /tmp/token_indices_word.pkl')
-    print('Done... File is /tmp/indices_token_word.pkl')
+    print('Done... File is ', TOKEN_INDICES_WORD_PATH)
+    print('Done... File is ', INDICES_TOKEN_WORD_PATH)
 
 
 def stream_from_file(training_filename):

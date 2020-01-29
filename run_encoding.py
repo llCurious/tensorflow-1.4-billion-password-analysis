@@ -8,7 +8,7 @@ from data_gen import LazyDataLoader, build_vocabulary, get_chars_and_ctable, bui
 parser = argparse.ArgumentParser('Data Encoding Tool.')
 parser.add_argument('--training_filename', type=str,
                     help='Result of run_data_processing.py. '
-                         'Something like: /home/premy/BreachCompilationAnalysis/edit-distances/1.csv',
+                         'Something like: /home/premy/BreachCompilationAnalysis/edit-distances/ppsm_dataset.csv',
                     required=True)
 # parser.add_argument('--encoding_output_folder', type=str, help='Will be used for training')
 
@@ -17,8 +17,8 @@ arg_p = parser.parse_args()
 print('Building vocabulary...')
 
 # build word level vocabulary, curious
-build_vocabulary_word(arg_p.training_filename)
-# build_vocabulary(arg_p.training_filename)
+# build_vocabulary_word(arg_p.training_filename)
+build_vocabulary(arg_p.training_filename)
 
 print('Vectorization...')
 
@@ -38,6 +38,7 @@ for i in tqdm(range(training_records_count), desc='Generating inputs and targets
     # Pad the data with spaces such that it is always MAXLEN.
     inputs.append(x_)
     targets.append(y_)
+    # print(y_)
 
 np.savez_compressed('/tmp/x_y.npz', inputs=inputs, targets=targets)
 
