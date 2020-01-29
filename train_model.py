@@ -10,6 +10,7 @@ from keras.layers import Dropout
 from keras.models import Sequential
 from keras_transformer import get_model
 from keras_transformer import decode
+from keras.models import load_model
 
 from data_gen import get_chars_and_ctable, colors, get_words_and_wtable
 from train_constants import *
@@ -17,7 +18,7 @@ import itertools
 
 def add_chars_for_transformer():
     chars, c_table = get_chars_and_ctable()
-    print('chars: [ ', chars, ' ]')
+    # print('chars: [ ', chars, ' ]')
     chars = chars + start_token + end_token
     print('chars: [ ', chars, ' ]')
     print(c_table.indices_char)
@@ -63,12 +64,12 @@ def get_script_arguments():
 
 
 def gen_large_chunk_single_thread(inputs_, targets_, chunk_size, iteration):
-    # random_indices = np.random.choice(a=range(len(inputs_)), size=chunk_size, replace=True)
-    # sub_inputs = inputs_[random_indices]
-    # sub_targets = targets_[random_indices]
+    random_indices = np.random.choice(a=range(len(inputs_)), size=chunk_size, replace=True)
+    sub_inputs = inputs_[random_indices]
+    sub_targets = targets_[random_indices]
 
-    sub_inputs = inputs_[chunk_size*(iteration-1):chunk_size*iteration]
-    sub_targets = targets_[chunk_size*(iteration-1):chunk_size*iteration]
+    # sub_inputs = inputs_[chunk_size*(iteration-1):chunk_size*iteration]
+    # sub_targets = targets_[chunk_size*(iteration-1):chunk_size*iteration]
     print(sub_inputs[:5])
     print(sub_targets[:5])
     x = np.zeros((chunk_size, ENCODING_MAX_PASSWORD_LENGTH))
@@ -118,8 +119,8 @@ def predict_top_most_likely_passwords_transformer_monte_carlo(model_, rowx_, row
     most_likely_passwords = []
     for ii in range(n_):
         # of course should take the edit distance constraint.
-        pa = np.array([np.random.choice(a=range(ENCODING_MAX_SIZE_VOCAB + 2), size=1, p=p_[jj, :])
-                       for jj in range(ENCODING_MAX_PASSWORD_LENGTH)]).flatten()
+        # print('a: ', len(range(ENCODING_MAX_SIZE_VOCAB + 4)), ', p: ', len(p_[1, :]))
+        pa = np.array([np.random.choice(a=range(ENCODING_MAX_SIZE_VOCAB + 5), size=1, p=p_[jj, :]) for jj in range(ENCODING_MAX_PASSWORD_LENGTH)]).flatten()
         most_likely_passwords.append(c_table.decode(pa, calc_argmax=False))
     return dict(Counter(most_likely_passwords).most_common(n_)).keys()
 
@@ -291,10 +292,40 @@ model.summary()
 # todo: delete, just for testing, the input and target 注释掉
 train_data_total = read_train_data()
 print('Total pwds: ', len(train_data_total), train_data_total[0])
-inputs, targets = generate_source_target(train_data_total)
+# inputs, targets = generate_source_target(train_data_total)
+
+
+# directly use the trained model to guess passwords
+train = True
+if not train:
+    model = load_model('my_model.h5')
+    x_train, y_train, x_val, y_val, output_y_train, output_y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE, iteration=iteration)
+
+    decoded = decode(
+        model,
+        tokens=[x.tolist() for x in x_val],
+        start_token=c_table.encode_char(start_token),
+        end_token=c_table.encode_char(end_token),
+        pad_token=c_table.encode_char(pad_char),
+        top_k=1,
+        max_len=ENCODING_MAX_PASSWORD_LENGTH,
+    )
+
+    for i in range(20):
+        print('-' * 50)
+        password = c_table.decode(decoded[-i], calc_argmax=False)
+        # print('former: ', x_val[i])
+        print('former-decode: ', c_table.decode(x_val[-i], False))
+        print('target: ', c_table.decode(y_val[-i], False))
+        print('decoded: ', decoded[-i])
+        print('guess: ', password)
+
+        rowx, rowy = x_val[-i], y_val[-i]
+        top_passwords = predict_top_most_likely_passwords_transformer_monte_carlo(model, rowx, rowy, 5)
+        print('top passwords for: ', c_table.decode(rowx), ' [[[ ', top_passwords)
 
 # Train the model each generation and show predictions against the validation data set.
-iteration_total = 500
+iteration_total = 50
 for iteration in range(1, iteration_total):
     x_train, y_train, x_val, y_val, output_y_train, output_y_val = gen_large_chunk_single_thread(inputs, targets, chunk_size=BATCH_SIZE, iteration=iteration)
     print()
@@ -344,23 +375,25 @@ for iteration in range(1, iteration_total):
         pad_token=c_table.encode_char(pad_char),
         top_k=1,
         max_len=ENCODING_MAX_PASSWORD_LENGTH,
+        max_repeat=30,  # 需要设置的较大，目前的batch_size 是25，初步认为得比这个大
     )
     #
+    print([x.tolist() for x in x_val])
     print(decoded)
     #
 
     for i in range(20):
         print('-' * 50)
         password = c_table.decode(decoded[-i], calc_argmax=False)
-        # print('former: ', x_val[i])
         print('former-decode: ', c_table.decode(x_val[-i], False))
         print('target: ', c_table.decode(y_val[-i], False))
         print('decoded: ', decoded[-i])
         print('guess: ', password)
 
-        rowx, rowy = x_val[np.array([i])], y_val[np.array([i])]
-        top_passwords = predict_top_most_likely_passwords_transformer_monte_carlo(model, rowx, rowy, 100)
-        print('top passwords: ', top_passwords)
+        rowx, rowy = x_val[np.array([-i])], y_val[np.array([-i])]
+        print(rowx, rowy)
+        top_passwords = predict_top_most_likely_passwords_transformer_monte_carlo(model, rowx, rowy, 5)
+        print('top passwords for: ', c_table.decode(x_val[-i], False), ' [[[ ', top_passwords)
 
     for i in range(0):
         ind = np.random.randint(0, len(x_val))
@@ -387,3 +420,5 @@ for iteration in range(1, iteration_total):
             print(colors.fail + '☒' + colors.close)
         print('top    :', ', '.join(top_passwords))
         print('---')
+
+model.save('my_model.h5')

@@ -63,7 +63,7 @@ print(encode_input[0], " : ", decode_input[0], " : ", decode_output[0])
 model.fit(
     x=[np.array(encode_input * 1024), np.array(decode_input * 1024)],
     y=np.array(decode_output * 1024),
-    epochs=10,
+    epochs=5,
     batch_size=32,
 )
 print("asds: ", np.array(encode_input * 1024)[:10])
@@ -74,6 +74,7 @@ decoded = decode(
     start_token=target_token_dict['<START>'],
     end_token=target_token_dict['<END>'],
     pad_token=target_token_dict['<PAD>'],
+    top_k=20,
 )
 print(''.join(map(lambda x: target_token_dict_inv[x], decoded[0][1:-1])))
 print(''.join(map(lambda x: target_token_dict_inv[x], decoded[1][1:-1])))
